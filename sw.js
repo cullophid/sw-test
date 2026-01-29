@@ -75,6 +75,12 @@ async function revalidate(cache, request) {
       });
 
       await cache.put(request, responseToCache);
+
+      // If it's HTML, scan for links to prefetch
+      const contentType = networkResponse.headers.get('Content-Type');
+      if (contentType && contentType.includes('text/html')) {
+        scanAndPrefetch(networkResponse.clone(), cache).catch(() => {});
+      }
     }
 
     return networkResponse;
@@ -83,5 +89,36 @@ async function revalidate(cache, request) {
     const fallback = await cache.match(request);
     if (fallback) return fallback;
     throw error;
+  }
+}
+
+/**
+ * Scans HTML content for links starting with "/" and triggers a background fetch for them
+ */
+async function scanAndPrefetch(response, cache) {
+  const html = await response.text();
+  // Regex to find href="/..." or href='/...'
+  const linkRegexp = /href=['"](\/[^'"]+)['"]/g;
+  let match;
+  const seen = new Set();
+
+  while ((match = linkRegexp.exec(html)) !== null) {
+    const path = match[1];
+    if (!seen.has(path)) {
+      seen.add(path);
+      const url = new URL(path, self.location.origin).href;
+      
+      // Check if already in cache and fresh before prefetching
+      const cached = await cache.match(url);
+      if (cached) {
+        const fetchedOn = cached.headers.get('X-SW-Fetched-On');
+        const age = fetchedOn ? Date.now() - new Date(fetchedOn).getTime() : Infinity;
+        if (age < MAX_AGE) continue;
+      }
+
+      console.log(`[SW] Prefetching: ${url}`);
+      // Use the existing logic to fetch and cache
+      revalidate(cache, new Request(url)).catch(() => {});
+    }
   }
 }

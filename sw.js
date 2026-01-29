@@ -1,5 +1,8 @@
-const CACHE_NAME = 'sw-cache-v1';
+const VERSION = '1.0.0';
+const CACHE_NAME = `sw-cache-${VERSION}`;
 const MAX_AGE = 60 * 1000; // 1 minute in milliseconds
+
+console.log(`[SW] Service Worker Version ${VERSION} loading...`);
 
 self.addEventListener('install', (event) => {
   // Activate immediately

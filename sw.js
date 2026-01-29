@@ -1,34 +1,34 @@
 const VERSION = '1.0.0';
 const CACHE_NAME = `sw-cache-${VERSION}`;
-const MAX_AGE = 60 * 1000; // 1 minute in milliseconds
+const MAX_AGE = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-console.log(`[SW] Service Worker Version ${VERSION} loading...`);
+/**
+ * Main request handler implementing the 10-minute SWR logic
+ */
+async function handleRequest(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cachedResponse = await cache.match(request);
 
-self.addEventListener('install', (event) => {
-  // Activate immediately
-  self.skipWaiting();
-});
+  if (cachedResponse) {
+    const fetchedOn = cachedResponse.headers.get('X-SW-Fetched-On');
+    const age = fetchedOn ? Date.now() - new Date(fetchedOn).getTime() : Infinity;
 
-self.addEventListener('activate', (event) => {
-  // Take control of all pages immediately
-  event.waitUntil(clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Only handle GET requests
-  if (request.method !== 'GET') return;
-
-  // Check if it's a page (navigation), CSS, or JS file
-  const isHtml = request.mode === 'navigate' || request.headers.get('Accept')?.includes('text/html');
-  const isCss = url.pathname.endsWith('.css') || request.destination === 'style';
-  const isJs = url.pathname.endsWith('.js') || request.destination === 'script';
-
-  if (isHtml || isCss || isJs) {
-    event.respondWith(handleRequest(request));
+    // If less than 10 minutes old, serve from cache and update in background
+    if (age < MAX_AGE) {
+      console.log(`[SW] Cache Hit (Fresh): ${request.url}`);
+      // Trigger background update
+      revalidate(cache, request).catch(() => {}); 
+      return cachedResponse;
+    }
+    console.log(`[SW] Cache Hit (Stale - Revalidating): ${request.url}`);
+  } else {
+    console.log(`[SW] Cache Miss: ${request.url}`);
   }
+
+  // If not in cache or older than 10 minutes (cache time 0), fetch from network
+  // and update the cache for the next request.
+  return revalidate(cache, request);
+}
 });
 
 /**

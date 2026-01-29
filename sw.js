@@ -116,7 +116,7 @@ async function scanAndPrefetch(response, cache) {
         if (age < MAX_AGE) continue;
       }
 
-      console.log(`[SW] Prefetching: ${url}`);
+      console.log(`[SW] Prefetching local link: ${url}`);
       // Use the existing logic to fetch and cache
       revalidate(cache, new Request(url)).catch(() => {});
     }
